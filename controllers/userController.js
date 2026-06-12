@@ -3,7 +3,7 @@ const Otp = require("../models/otpModel");
 
 const bcrypt = require("bcryptjs");
 
-
+const Token=require("../models/tokenModel");
 const jwt = require("jsonwebtoken");
 
 const generateOTP = require("../utils/genOtp");
@@ -12,30 +12,43 @@ const generateOTP = require("../utils/genOtp");
 
 exports.register = async (req, res) => {
   try {
-    console.log("========== REGISTER HIT ==========");
-
-    console.log("BODY:", req.body);
-    console.log("FILE RAW:", req.file);
+    const { countryCode, phone, email, password } = req.body;
 
     if (!req.file) {
-      console.log("❌ NO FILE RECEIVED BY MULTER");
-
       return res.status(400).json({
         success: false,
         message: "Profile photo is required",
       });
     }
 
-    console.log("FILE PATH:", req.file.path);
-
-    const { countryCode, phone, email, password } = req.body;
-
     const fullPhone = countryCode + phone;
 
-    console.log("FULL PHONE:", fullPhone);
+    const phoneExists = await User.findOne({
+      phone: fullPhone,
+    });
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    console.log("PASSWORD HASHED");
+    if (phoneExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone already registered",
+      });
+    }
+
+    const emailExists = await User.findOne({
+      email,
+    });
+
+    if (emailExists) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already registered",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(
+      password,
+      10
+    );
 
     const user = await User.create({
       countryCode,
@@ -45,27 +58,29 @@ exports.register = async (req, res) => {
       profilePhoto: req.file.path,
     });
 
-    console.log("USER CREATED:", user._id);
-
-    const token = jwt.sign(
+    const jwtToken = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      {
+        expiresIn: "7d",
+      }
     );
 
-    console.log("TOKEN GENERATED");
-
-    return res.status(201).json({
-      success: true,
-      message: "Registration Successful",
-      token,
-      user,
+    await Token.create({
+      userId: user._id,
+      token: jwtToken,
     });
 
+    res.status(201).json({
+      success: true,
+      message: "Registration Successful",
+      token: jwtToken,
+      user,
+    });
   } catch (error) {
-    console.log("🔥 REGISTER ERROR:", error);
+    console.log(error);
 
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
       message: error.message,
     });
@@ -75,7 +90,7 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const {  email,countryCode, phone, password } =
+    const { countryCode, phone, password } =
       req.body;
 
     const fullPhone = countryCode + phone;
@@ -103,7 +118,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    const token = jwt.sign(
+    const jwtToken = jwt.sign(
       { id: user._id },
       process.env.JWT_SECRET,
       {
@@ -111,15 +126,20 @@ exports.login = async (req, res) => {
       }
     );
 
+    await Token.create({
+      userId: user._id,
+      token: jwtToken,
+    });
+
     res.status(200).json({
       success: true,
       message: "Login Successful",
-      token,
+      token: jwtToken,
       user,
     });
-
   } catch (error) {
     res.status(500).json({
+      success: false,
       message: error.message,
     });
   }
@@ -148,7 +168,25 @@ exports.sendOtp = async (req, res) => {
     });
   }
 };
+exports.getUserTokens = async (req, res) => {
+  try {
+    const userId = req.params.userId.trim();
 
+    const tokens = await Token.find({
+      userId,
+    });
+
+    res.status(200).json({
+      success: true,
+      tokens,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 exports.verifyOtp = async (req, res) => {
   try {
     const { countryCode, phone, otp } =

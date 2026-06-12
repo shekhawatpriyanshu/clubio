@@ -5,6 +5,7 @@ const upload = require("../middleware/uploads");
 
 const {
   register,
+  getUserTokens,
   sendOtp,
   verifyOtp,
   login,
@@ -25,5 +26,9 @@ router.post(
 router.post("/send-otp", sendOtp);
 router.post("/verify-otp", verifyOtp);
 router.post("/login", login);
+router.get(
+  "/tokens/:userId",
+  getUserTokens
+);
 
 module.exports = router;
