@@ -34,6 +34,18 @@ const userSchema = new mongoose.Schema(
   required: true,
   
 },
+blockedUsers: [
+  {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+],
+
+status: {
+  type: String,
+  enum: ["active", "inactive"],
+  default: "active",
+},
 
 
     isVerified: {

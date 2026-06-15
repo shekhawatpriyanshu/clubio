@@ -1,7 +1,9 @@
 const User = require("../models/userModel");
 const Otp = require("../models/otpModel");
+const mongoose = require("mongoose");
 
 const bcrypt = require("bcryptjs");
+const token = require("../models/tokenModel");
 
 const Token=require("../models/tokenModel");
 const jwt = require("jsonwebtoken");
@@ -44,6 +46,16 @@ exports.register = async (req, res) => {
         message: "Email already registered",
       });
     }
+    const passwordRegex =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+if (!passwordRegex.test(password)) {
+  return res.status(400).json({
+    success: false,
+    message:
+      "Password must contain at least 8 characters, one uppercase letter, one lowercase letter, one number and one special character",
+  });
+}
   
 
     const hashedPassword = await bcrypt.hash(
@@ -106,6 +118,13 @@ exports.login = async (req, res) => {
         message: "User not found",
       });
     }
+    if (user.status === "inactive") {
+  return res.status(403).json({
+    success: false,
+    message:
+      "Account is deactivated",
+  });
+}
 
     const isMatch = await bcrypt.compare(
       password,
@@ -119,18 +138,25 @@ exports.login = async (req, res) => {
       });
     }
 
-    const jwtToken = jwt.sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
-    );
+  const token = jwt.sign(
+  { id: user._id },
+  process.env.JWT_SECRET,
+  { expiresIn: "7d" }
+);
 
-    await Token.create({
-      userId: user._id,
-      token: jwtToken,
-    });
+await Token.deleteMany({
+  userId: user._id,
+});
+
+await Token.create({
+  userId: user._id,
+  token,
+});
+
+return res.status(200).json({
+  success: true,
+  token,
+});
 
     res.status(200).json({
       success: true,
@@ -158,13 +184,20 @@ exports.sendOtp = async (req, res) => {
       phone: fullPhone,
     });
 
-    await Otp.create({
-      phone: fullPhone,
-      otp,
-      expiresAt: Date.now() + 5 * 60 * 1000,
-    });
+const otpData = await Otp.create({
+  phone: fullPhone,
+  otp,
+  expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+});
+const checkOtp = await Otp.findOne({
+  phone: fullPhone,
+});
 
-    console.log("Saved OTP:", otp);
+console.log("Found:", checkOtp);
+
+
+
+    console.log(" OTP:", otp);
 
     res.status(200).json({
       success: true,
@@ -555,6 +588,236 @@ exports.forgotPasswordSendOtp =
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+exports.deleteAccount = async (
+  req,
+  res
+) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(
+      userId
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Delete Cloudinary image
+    if (user.profilePhoto) {
+      try {
+        const publicId =
+          user.profilePhoto
+            .split("/")
+            .pop()
+            .split(".")[0];
+
+        await cloudinary.uploader.destroy(
+          `profile_photos/${publicId}`
+        );
+      } catch (err) {
+        console.log(
+          "Cloudinary delete error:",
+          err.message
+        );
+      }
+    }
+
+    // Delete all tokens
+    await Token.deleteMany({
+      userId,
+    });
+
+    // Delete OTPs
+    await Otp.deleteMany({
+      $or: [
+        { phone: user.phone },
+        { email: user.email },
+      ],
+    });
+
+    // Delete User
+    await User.findByIdAndDelete(
+      userId
+    );
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Account deleted successfully",
+    });
+  } catch (error) {
+    console.log(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+exports.blockUser = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { targetUserId } = req.body;
+
+    if (userId === targetUserId) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot block yourself",
+      });
+    }
+
+    const user = await User.findById(userId);
+
+    const targetUser = await User.findById(targetUserId);
+
+    if (!user || !targetUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const alreadyBlocked = user.blockedUsers.some(
+      (id) => id.toString() === targetUserId
+    );
+
+    if (alreadyBlocked) {
+      return res.status(400).json({
+        success: false,
+        message: "User already blocked",
+      });
+    }
+
+    // Add to blocked users list
+    user.blockedUsers.push(targetUserId);
+    await user.save();
+
+    // Make blocked user inactive
+    targetUser.status = "inactive";
+    await targetUser.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "User blocked and account deactivated successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Unblock User
+exports.unblockUser = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { targetUserId } = req.body;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    user.blockedUsers = user.blockedUsers.filter(
+      (id) => id.toString() !== targetUserId
+    );
+
+    await user.save();
+
+    // Reactivate blocked user
+    await User.findByIdAndUpdate(
+      targetUserId,
+      {
+        status: "active",
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "User unblocked and account activated successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Deactivate Account
+exports.deactivateAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { status: "inactive" },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    await Token.deleteMany({ userId });
+
+    return res.status(200).json({
+      success: true,
+      message: "Account deactivated successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.activateAccount = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    console.log("Activating User:", userId);
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { status: "active" },
+      { new: true }
+    );
+
+    console.log("Updated User:", user);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Account activated successfully",
+      user,
+    });
+  } catch (error) {
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

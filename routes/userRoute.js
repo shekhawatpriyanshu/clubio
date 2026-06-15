@@ -1,12 +1,17 @@
 const express = require("express");
 const router = express.Router();
 
+
 const upload = require("../middleware/uploads");
 
 const {
   register,
   getUserTokens,
   sendOtp,
+  deactivateAccount,
+  activateAccount,
+  blockUser,
+  unblockUser,
   verifyOtp,
   forgotPasswordSendOtp,
   resetPassword,updateProfile,
@@ -15,7 +20,19 @@ const {
 } = require("../controllers/userController");
 
 console.log("REGISTER ROUTE HIT");
+const {
+  deleteAccount,
+} = require("../controllers/userController");
 
+const {
+  auth,
+} = require("../middleware/authMiddleware");
+
+router.delete(
+  "/delete-account",
+  auth,
+  deleteAccount
+);
 router.post(
   "/register",
   upload.single("profilePhoto"),
@@ -46,6 +63,21 @@ router.put(
   "/update-profile/:userId",
   upload.single("profilePhoto"),
   updateProfile
+);
+router.post("/block-user", auth, blockUser);
+
+router.post("/unblock-user", auth, unblockUser);
+
+router.patch(
+  "/deactivate-account",
+  auth,
+  deactivateAccount
+);
+
+router.patch(
+  "/activate-account",
+  auth,
+  activateAccount
 );
 
 module.exports = router;
