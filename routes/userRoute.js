@@ -8,6 +8,9 @@ const {
   getUserTokens,
   sendOtp,
   verifyOtp,
+  forgotPasswordSendOtp,
+  resetPassword,updateProfile,
+  
   login,
 } = require("../controllers/userController");
 
@@ -29,6 +32,20 @@ router.post("/login", login);
 router.get(
   "/tokens/:userId",
   getUserTokens
+);
+router.post(
+  "/forgot-password/send-otp",
+  forgotPasswordSendOtp
+);
+
+router.post(
+  "/forgot-password/reset",
+  resetPassword
+);
+router.put(
+  "/update-profile/:userId",
+  upload.single("profilePhoto"),
+  updateProfile
 );
 
 module.exports = router;
