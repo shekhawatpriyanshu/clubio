@@ -823,3 +823,68 @@ exports.activateAccount = async (req, res) => {
     });
   }
 };
+
+// change theme controller
+exports.changeTheme = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { theme } = req.body;
+
+    if (!["light", "dark", "system"].includes(theme)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid theme",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { theme },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Theme updated successfully",
+      theme: user.theme,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+// get theme 
+exports.getTheme = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId)
+      .select("theme");
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      theme: user.theme,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

@@ -46,6 +46,12 @@ status: {
   enum: ["active", "inactive"],
   default: "active",
 },
+theme:{
+  type:String,
+  enum:['dark','light','system'],
+  default:'light'
+
+},
 
 
     isVerified: {

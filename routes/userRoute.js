@@ -10,6 +10,8 @@ const {
   sendOtp,
   deactivateAccount,
   activateAccount,
+  changeTheme,
+  getTheme,
   blockUser,
   unblockUser,
   verifyOtp,
@@ -78,6 +80,17 @@ router.patch(
   "/activate-account",
   auth,
   activateAccount
+);
+router.patch(
+  "/change-theme",
+  auth,
+  changeTheme
+);
+
+router.get(
+  "/theme",
+  auth,
+  getTheme
 );
 
 module.exports = router;
